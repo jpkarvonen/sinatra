@@ -1,5 +1,6 @@
 require "rack"
 
+
 module Nancy
   class Base
     def initialize
@@ -24,10 +25,13 @@ module Nancy
       route("PATCH", path, &handler)
     end
 
-    def delete(path, &hander)
+    def delete(path, &handler)
       route("DELETE", path, &handler)
     end
 
+    def head(path, &handler)
+      route("HEAD", path, &handler)
+    end
 
     def call(env)
       @request = Rack::Request.new(env)
@@ -48,36 +52,33 @@ module Nancy
       end
     end
 
-    def params
-      @request.params
-    end
-
-
     private
 
     def route(verb, path, &handler)
       @routes[verb] ||= {}
       @routes[verb][path] = handler
     end
+
+    def params
+      @request.params
+    end
   end
 
   Application = Base.new
+
+  module Delegator
+    def self.delegate(*methods, to:)
+      Array(methods).each do |method_name|
+        define_method(method_name) do |*args, &block|
+          to.send(method_name, *args, &block)
+        end
+
+        private method_name
+      end
+    end
+
+    delegate :get, :patch, :put, :post, :delete, :head, to: Application
+  end
 end
 
-nancy_application = Nancy::Application
-
-nancy_application.get "/hello" do
-  "Nancy says hello"
-end
-
-nancy_application.get "/" do
-  [200, {}, ["Your params are #{params.inspect}"]]
-end
-
-nancy_application.post "/" do
-  [200, {}, request.body]
-end
-
-
-
-Rack::Handler::WEBrick.run nancy_application, Port: 9292
+include Nancy::Delegator
